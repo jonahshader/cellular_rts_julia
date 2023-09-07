@@ -7,6 +7,7 @@ using Reexport
 
 const Pos = Vector{Int64}
 
+# TODO: combine UnitType and Unit maybe. 
 abstract type UnitType end
 struct GI <: UnitType end
 struct Miner <: UnitType end
@@ -27,7 +28,6 @@ get_color(_) = RGB(0f0, 0f0, 0f0)
 
 mutable struct Unit
     type::UnitType
-    team::Bool
     selected::Bool
 end
 
@@ -146,3 +146,7 @@ test_terrain() = make_world_gen([15, 15], 3) |> make_terrain .|> get_color
 #         0
 #     )
 # end
+
+function World(; size=15, world_gen::WorldGen=make_world_gen([size, size], 3))
+  
+end
