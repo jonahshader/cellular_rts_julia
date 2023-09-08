@@ -28,6 +28,7 @@ get_color(_) = RGB(0f0, 0f0, 0f0)
 
 mutable struct Unit
     type::UnitType
+    position::Pos
     selected::Bool
 end
 
@@ -62,7 +63,7 @@ is_in_round_radius(pos, size, radius) = norm(pos .- (size .÷ 2) .- 1) < radius
 is_in_square_radius(pos, size, radius) = max(abs.(pos .- (size .÷ 2) .- 1)...) < radius
 
 
-function make_world_gen(size::Vector, spawn_radius)
+function make_world_gen(size::Vector = [15, 15], spawn_radius = 3)
     main_sampler = billow_fractal_2d()
     noise_sampler = value_2d()
 
@@ -112,8 +113,20 @@ is_spawn(world_gen::WorldGen, pos::Pos) = is_in_square_radius(pos, world_gen.siz
 
 is_gi(world_gen::WorldGen, pos::Pos) = is_in_round_radius(pos, world_gen.size, world_gen.spawn_radius * 0.75f0)
 
-# is_point(world_gen::WorldGen, pos::Pos) = sample_noise(world_gen, pos) > 0.125f0
 is_point(world_gen::WorldGen, pos::Pos) = !is_in_square_radius(pos, world_gen.size, world_gen.spawn_radius * 2f0)
+# is_in is one of the above
+get_all_pos(world_gen::WorldGen, is_in::Function) = [[x, y] for x in 1:world_gen.size[1] for y in 1:world_gen.size[2] if is_in(world_gen, [x, y])]
+
+pos_to_unit(pos::Pos, T)::Unit = Unit(T, pos, false)
+
+# TODO: check type stability, performance implications
+make_pos_to_type(type) = pos -> pos_to_unit(pos, type())
+# test with: 
+# c = cellular_rts
+# wgen = c.make_world_gen()
+# c.get_all_pos(wgen, c.is_gi) .|> c.make_pos_to_type(c.Miner)
+
+pos_to_gi(pos::Pos) = pos_to_unit(pos, GI())
 
 function make_tile(world_gen::WorldGen, pos::Pos)::TileType
     if is_spawn(world_gen, pos)
@@ -127,26 +140,35 @@ function make_tile(world_gen::WorldGen, pos::Pos)::TileType
     end
 end
 
+function render_unit!(mat::Matrix{Bool}, unit::Unit)
+    mat[unit.position...] = true
+    nothing
+end
+
+function render_units(units::Vector{Unit}, size::Tuple)::AbstractMatrix{Bool}
+    mat = zeros(Bool, size...)
+    for unit in units
+        render_unit!(mat, unit)
+    end
+    mat
+end
+
+
+
 make_terrain(world_gen::WorldGen) = [make_tile(world_gen, [x, y]) for x in 1:world_gen.size[1], y in 1:world_gen.size[2]]
 
-test_terrain() = make_world_gen([15, 15], 3) |> make_terrain .|> get_color
+test_terrain() = make_world_gen() |> make_terrain .|> get_color
 
 
-# wall_density is (x, y) -> float
-# function World(; width::Integer=32, height::Integer=2, wall_density::WorldGen = make_wall_density(), origin::SVector{2, Float32}=SA_F32[0, 0])
-#     # TODO: make better version of sample_to_trees: sample_to_buildings
-#     return World(
-#         zeros(UInt8, width, height),
-#         Vector{Unit}(),
-#         Vector{Unit}(),
-#         randn(UInt8, width, height),
-#         Vector{Pos}(),
-#         Matrix{BuildingType}(BuildingType.noone, width, height),
-#         origin,
-#         0
-#     )
-# end
 
-function World(; size=15, world_gen::WorldGen=make_world_gen([size, size], 3))
-  
+function World(; size=15, world_gen::WorldGen=make_world_gen([size, size]))
+    World(
+        zeros(UInt8, size, size),
+        Vector{Unit}(),
+        Vector{Unit}(),
+        zeros(UInt8, size, size),
+        Vector{Pos}(),
+        make_terrain(world_gen),
+        0
+    )
 end
