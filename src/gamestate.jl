@@ -12,6 +12,12 @@ abstract type UnitType end
 struct GI <: UnitType end
 struct Miner <: UnitType end
 
+# get_color(unknown) = RGB(0f0, 0f0, 0f0)
+function get_color(unknown)
+    println(typeof(unknown))
+    RGB(0f0, 0f0, 0f0)
+end
+
 get_color(_::GI) = RGB(0f0, 0f0, 1f0)
 get_color(_::Miner) = RGB(0.3f0, 0.7f0, 0.2f0)
 
@@ -24,7 +30,7 @@ get_color(_::Grass) = RGB(0.3f0, 1f0, 0.3f0)
 get_color(_::Tree) = RGB(0f0, 0.5f0, 0f0)
 get_color(_::Point) = RGB(1f0, 1f0, 0f0)
 
-get_color(_) = RGB(0f0, 0f0, 0f0)
+
 
 mutable struct Unit
     type::UnitType
@@ -51,6 +57,7 @@ mutable struct WorldGen
     spatial_scale::Float32
     origin::Vector{Float32}
 end
+
 
 sample_to_mat(width, height, sample, scale=0.01f0) =
     [sample(x * scale, y * scale) for x in 0:(width-1), y in 0:(height-1)]
@@ -126,7 +133,8 @@ make_pos_to_type(type) = pos -> pos_to_unit(pos, type())
 # wgen = c.make_world_gen()
 # c.get_all_pos(wgen, c.is_gi) .|> c.make_pos_to_type(c.Miner)
 
-pos_to_gi(pos::Pos) = pos_to_unit(pos, GI())
+const pos_to_gi = make_pos_to_type(GI)
+const pos_to_miner = make_pos_to_type(Miner)
 
 function make_tile(world_gen::WorldGen, pos::Pos)::TileType
     if is_spawn(world_gen, pos)
@@ -140,35 +148,106 @@ function make_tile(world_gen::WorldGen, pos::Pos)::TileType
     end
 end
 
-function render_unit!(mat::Matrix{Bool}, unit::Unit)
-    mat[unit.position...] = true
-    nothing
-end
-
-function render_units(units::Vector{Unit}, size::Tuple)::AbstractMatrix{Bool}
+function plot_units(units::Vector{Unit}, size::Tuple)::AbstractMatrix{Bool}
     mat = zeros(Bool, size...)
     for unit in units
-        render_unit!(mat, unit)
+        mat[unit.position...] = true
     end
     mat
 end
 
+function render_units(units::Vector{Unit}, size::Tuple)::AbstractMatrix{RGB}
+    mat = zeros(RGB, size...)
+    for unit in units
+        mat[unit.position...] = get_color(unit)
+    end
+    mat
+end
+
+function render_units!(img, units::Vector{Unit})
+    for unit in units
+        img[unit.position...] = get_color(unit.type)
+    end
+    nothing
+end
 
 
 make_terrain(world_gen::WorldGen) = [make_tile(world_gen, [x, y]) for x in 1:world_gen.size[1], y in 1:world_gen.size[2]]
 
 test_terrain() = make_world_gen() |> make_terrain .|> get_color
 
-
+function render_world(world::World)
+    img = world.terrain .|> get_color
+    render_units!(img, world.a_units)
+    render_units!(img, world.b_units)
+    img
+end
 
 function World(; size=15, world_gen::WorldGen=make_world_gen([size, size]))
+    a_units = pos_to_gi.(get_all_pos(world_gen, is_gi))
+    
     World(
         zeros(UInt8, size, size),
-        Vector{Unit}(),
+        a_units,
         Vector{Unit}(),
         zeros(UInt8, size, size),
         Vector{Pos}(),
         make_terrain(world_gen),
         0
     )
+end
+
+function act!(world::World, action::Vector{Float32})
+    s = size(world.terrain)
+    select_min = min.(1f0 .+ min.(action[1:2], action[3:4]) .* s[1], s[1]) .|> round .|> Int64
+    select_max = min.(1f0 .+ max.(action[1:2], action[3:4]) .* s[2], s[2]) .|> round .|> Int64
+    
+    discrete_action = argmax(action[5:9])
+    change_selection = action[10] > 0.5f0
+
+
+    dir::Pos = [0, 0]
+
+    if discrete_action != 1
+        if discrete_action == 2
+            dir[1] = -1
+        elseif discrete_action == 3
+            dir[2] = 1
+        elseif discrete_action == 4
+            dir[1] = 1
+        else discrete_action == 5
+            dir[2] = -1
+        end
+    end
+
+    if change_selection
+        # todo: iterate units, change selection
+        for unit in world.a_units
+            if reduce(&, select_min .<= unit.pos .<= select_max)
+                unit.selected = true
+            else
+                unit.selected = false
+            end
+        end
+    end
+
+    # clear move_reserve_count
+    fill!(world.move_reserve_count, 0)
+
+    if x_dir != 0 || y_dir != 0
+        # add to move_reserve_count
+        # all units do this even if they don't want to move
+        for unit in world.a_units
+            target_pos = unit.pos
+            if unit.selected
+                target_pos = target_pos .+ dir
+            end
+            target_pos[1] = clamp(target_pos[1], 1:s[1])
+            target_pos[2] = clamp(target_pos[2], 1:s[2])
+            # increment reserve count for desired pos
+            world.move_reserve_count[target_pos...] += 1
+        end
+    end
+    
+    nothing
 end
