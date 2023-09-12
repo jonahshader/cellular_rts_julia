@@ -30,6 +30,11 @@ get_color(_::Grass) = RGB(0.3f0, 1f0, 0.3f0)
 get_color(_::Tree) = RGB(0f0, 0.5f0, 0f0)
 get_color(_::Point) = RGB(1f0, 1f0, 0f0)
 
+solid(_) = false
+solid(_::Grass) = false
+solid(_::Tree) = true
+solid(_::Point) = false
+
 
 
 mutable struct Unit
@@ -197,6 +202,16 @@ function World(; size=15, world_gen::WorldGen=make_world_gen([size, size]))
     )
 end
 
+function target_pos(unit::Unit, dir::Pos, world_size::Tuple)
+    tpos = unit.position
+    if unit.selected
+        tpos = tpos .+ dir
+    end
+    tpos[1] = clamp(tpos[1], 1:world_size[1])
+    tpos[2] = clamp(tpos[2], 1:world_size[2])
+    tpos
+end
+
 function act!(world::World, action::Vector{Float32})
     s = size(world.terrain)
     select_min = min.(1f0 .+ min.(action[1:2], action[3:4]) .* s[1], s[1]) .|> round .|> Int64
@@ -220,10 +235,18 @@ function act!(world::World, action::Vector{Float32})
         end
     end
 
+    act!(world, select_min, select_max, change_selection, dir)
+end
+
+
+# action must be length 10
+function act!(world::World, select_min, select_max, change_selection, dir)
+    s = size(world.terrain)
+
     if change_selection
         # todo: iterate units, change selection
         for unit in world.a_units
-            if reduce(&, select_min .<= unit.pos .<= select_max)
+            if reduce(&, select_min .<= unit.position .<= select_max)
                 unit.selected = true
             else
                 unit.selected = false
@@ -234,20 +257,38 @@ function act!(world::World, action::Vector{Float32})
     # clear move_reserve_count
     fill!(world.move_reserve_count, 0)
 
-    if x_dir != 0 || y_dir != 0
+    # TODO make more julian
+    if dir[1] != 0 || dir[2] != 0
         # add to move_reserve_count
         # all units do this even if they don't want to move
         for unit in world.a_units
-            target_pos = unit.pos
-            if unit.selected
-                target_pos = target_pos .+ dir
-            end
-            target_pos[1] = clamp(target_pos[1], 1:s[1])
-            target_pos[2] = clamp(target_pos[2], 1:s[2])
+            tpos = target_pos(unit, dir, s)
             # increment reserve count for desired pos
-            world.move_reserve_count[target_pos...] += 1
+            world.move_reserve_count[tpos...] += 1
+        end
+
+        # move units
+        for unit in world.a_units
+            tpos = target_pos(unit, dir, s)
+            if world.move_reserve_count[tpos...] == 1
+                unit.position .= tpos
+            end
         end
     end
+
+    # collect points
+    points = 0
+
+    for unit in world.a_units
+        # TODO: maybe try comparison against Point() instead
+        if world.terrain[unit.position...] == Point()
+            points += 1
+            world.terrain[unit.position...] = Grass()
+        end
+
+    end
+
+    world.age += 1
     
-    nothing
+    points
 end
