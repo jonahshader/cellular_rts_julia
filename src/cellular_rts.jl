@@ -1,6 +1,7 @@
 module cellular_rts
 
 include("gamestate.jl")
+include("environments.jl")
 
 using CSFML
 using CSFML.LibCSFML
