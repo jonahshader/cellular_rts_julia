@@ -134,6 +134,7 @@ pos_to_unit(pos::Pos, T)::Unit = Unit(T, pos, false)
 # TODO: check type stability, performance implications
 make_pos_to_type(type) = pos -> pos_to_unit(pos, type())
 # test with: 
+# using cellular_rts
 # c = cellular_rts
 # wgen = c.make_world_gen()
 # c.get_all_pos(wgen, c.is_gi) .|> c.make_pos_to_type(c.Miner)
@@ -202,25 +203,23 @@ function World(; size=15, world_gen::WorldGen=make_world_gen([size, size]))
     )
 end
 
-function target_pos(unit::Unit, dir::Pos, world_size::Tuple)
-    tpos = unit.position
+function target_pos(unit::Unit, dir::Pos, world_size::Tuple, occupancy::AbstractMatrix{Bool})
+    tpos = [unit.position...]
     if unit.selected
-        tpos = tpos .+ dir
+        tpos .+= dir
     end
     tpos[1] = clamp(tpos[1], 1:world_size[1])
     tpos[2] = clamp(tpos[2], 1:world_size[2])
-    tpos
+    if occupancy[tpos...]
+        return [unit.position...]
+    else
+        return tpos
+    end
+    
 end
 
-function act!(world::World, action::Vector{Float32})
-    s = size(world.terrain)
-    select_min = min.(1f0 .+ min.(action[1:2], action[3:4]) .* s[1], s[1]) .|> round .|> Int64
-    select_max = min.(1f0 .+ max.(action[1:2], action[3:4]) .* s[2], s[2]) .|> round .|> Int64
-    
-    discrete_action = argmax(action[5:9])
-    change_selection = action[10] > 0.5f0
-
-
+function action_vec_to_dir(action)
+    discrete_action = argmax(action)
     dir::Pos = [0, 0]
 
     if discrete_action != 1
@@ -234,13 +233,33 @@ function act!(world::World, action::Vector{Float32})
             dir[2] = -1
         end
     end
+    dir
+end
+
+# action lenght = 10
+function act!(world::World, action::Vector{Float32})
+    s = size(world.terrain)
+    select_min = min.(1f0 .+ min.(action[1:2], action[3:4]) .* s[1], s[1]) .|> round .|> Int64
+    select_max = min.(1f0 .+ max.(action[1:2], action[3:4]) .* s[2], s[2]) .|> round .|> Int64
+    
+    dir = action_vec_to_dir(action[5:9])
+    change_selection = action[10] > 0.5f0
 
     act!(world, select_min, select_max, change_selection, dir)
+end
+
+function act_always_selected!(world::World, action::Vector{Float32})
+    s = size(world.terrain)
+    select_min = [1, 1]
+    select_max = [s[1], s[2]]
+    discrete_action = argmax(action[1:5])
+    
 end
 
 
 # action must be length 10
 function act!(world::World, select_min, select_max, change_selection, dir)
+    # TODO: replace for loops with maps or something
     s = size(world.terrain)
 
     if change_selection
@@ -257,19 +276,27 @@ function act!(world::World, select_min, select_max, change_selection, dir)
     # clear move_reserve_count
     fill!(world.move_reserve_count, 0)
 
+    # build an occupancy map
+    occupancy = solid.(world.terrain)
+
+    for unit in world.a_units
+        @assert occupancy[unit.position...] == false
+        occupancy[unit.position...] = true
+    end
+
     # TODO make more julian
     if dir[1] != 0 || dir[2] != 0
         # add to move_reserve_count
         # all units do this even if they don't want to move
         for unit in world.a_units
-            tpos = target_pos(unit, dir, s)
+            tpos = target_pos(unit, dir, s, occupancy)
             # increment reserve count for desired pos
             world.move_reserve_count[tpos...] += 1
         end
 
         # move units
         for unit in world.a_units
-            tpos = target_pos(unit, dir, s)
+            tpos = target_pos(unit, dir, s, occupancy)
             if world.move_reserve_count[tpos...] == 1
                 unit.position .= tpos
             end
