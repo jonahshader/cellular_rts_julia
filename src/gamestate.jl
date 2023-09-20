@@ -21,6 +21,12 @@ end
 get_color(_::GI) = RGB(0f0, 0f0, 1f0)
 get_color(_::Miner) = RGB(0.3f0, 0.7f0, 0.2f0)
 
+get_layer(_) = 1
+get_layer(_::GI) = 1
+get_layer(_::Miner) = 2
+
+const MAX_UNIT_LAYERS = 2
+
 abstract type TileType end
 struct Grass <: TileType end
 struct Tree <: TileType end
@@ -29,6 +35,12 @@ struct Point <: TileType end
 get_color(_::Grass) = RGB(0.3f0, 1f0, 0.3f0)
 get_color(_::Tree) = RGB(0f0, 0.5f0, 0f0)
 get_color(_::Point) = RGB(1f0, 1f0, 0f0)
+
+get_layer(_::Grass) = 3
+get_layer(_::Tree) = 4
+get_layer(_::Point) = 5
+
+const MAX_LAYERS = 5
 
 solid(_) = false
 solid(_::Grass) = false
@@ -162,6 +174,14 @@ function plot_units(units::Vector{Unit}, size::Tuple)::AbstractMatrix{Bool}
     mat
 end
 
+function plot_unit_layers(units::Vector{Unit}, size::Tuple)::Matrix{Int32}
+    mat = zeros(Int32, size...)
+    for unit in units
+        mat[unit.position...] = get_layer(unit)
+    end
+    mat
+end
+
 function render_units(units::Vector{Unit}, size::Tuple)::AbstractMatrix{RGB}
     mat = zeros(RGB, size...)
     for unit in units
@@ -175,6 +195,22 @@ function render_units!(img, units::Vector{Unit})
         img[unit.position...] = get_color(unit.type)
     end
     nothing
+end
+
+function plot_all(w::World)
+    mats::Vector{Matrix{Float32}} = []
+    # build unit layers
+    unit_layers = plot_unit_layers(w.a_units, size(w.terrain))
+    for i in 1:MAX_UNIT_LAYERS
+        mat = Float32.(unit_layers .== i)
+        push!(mats, mat)
+    end
+    # build terrain layers
+    for i in (MAX_UNIT_LAYERS+1):MAX_LAYERS
+        mat = Float32.(get_layer.(w.terrain) .== i)
+        push!(mats, mat)
+    end
+    mats
 end
 
 
