@@ -63,6 +63,7 @@ mutable struct World
     ore_emitters::Vector{Pos}
     terrain::Matrix{TileType}
     age::Int64
+    max_age::Int64
 end
 
 mutable struct WorldGen
@@ -235,7 +236,8 @@ function World(; size=15, world_gen::WorldGen=make_world_gen([size, size]))
         zeros(UInt8, size, size),
         Vector{Pos}(),
         make_terrain(world_gen),
-        0
+        0,
+        512
     )
 end
 
@@ -254,7 +256,7 @@ function target_pos(unit::Unit, dir::Pos, world_size::Tuple, occupancy::Abstract
     
 end
 
-function action_vec_to_dir(action)
+function action_vec_to_dir(action)::Pos
     discrete_action = argmax(action)
     dir::Pos = [0, 0]
 
@@ -272,7 +274,7 @@ function action_vec_to_dir(action)
     dir
 end
 
-# action lenght = 10
+# action length = 10
 function act!(world::World, action::Vector{Float32})
     s = size(world.terrain)
     select_min = min.(1f0 .+ min.(action[1:2], action[3:4]) .* s[1], s[1]) .|> round .|> Int64
@@ -284,17 +286,22 @@ function act!(world::World, action::Vector{Float32})
     act!(world, select_min, select_max, change_selection, dir)
 end
 
+# action length = 5
 function act_always_selected!(world::World, action::Vector{Float32})
+    dir = action_vec_to_dir(action[1:5])
+    
+    act_always_selected!(world, dir)
+end
+
+function act_always_selected!(world::World, dir::Pos)
     s = size(world.terrain)
     select_min = [1, 1]
     select_max = [s[1], s[2]]
-    discrete_action = argmax(action[1:5])
-    
+
+    act!(world, select_min, select_max, true, dir);
 end
 
-
-# action must be length 10
-function act!(world::World, select_min, select_max, change_selection, dir)
+function act!(world::World, select_min, select_max, change_selection::Bool, dir::Pos)
     # TODO: replace for loops with maps or something
     s = size(world.terrain)
 
@@ -351,7 +358,10 @@ function act!(world::World, select_min, select_max, change_selection, dir)
 
     end
 
+    # determine if the sim is done
+    done = sum(typeof.(world.terrain) .== Point) == 0 || world.age >= world.max_age
+
     world.age += 1
     
-    points
+    points, done
 end

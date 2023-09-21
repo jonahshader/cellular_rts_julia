@@ -2,6 +2,7 @@ module cellular_rts
 
 include("gamestate.jl")
 include("environments.jl")
+include("models/models.jl")
 
 using CSFML
 using CSFML.LibCSFML
@@ -10,7 +11,7 @@ using CSFML.LibCSFML
 export run_game
 
 function run_game() 
-    mode = sfVideoMode(1280, 720, 32)
+    mode = sfVideoMode(640, 640, 32)
     
     window = sfRenderWindow_create(mode, "SFML window", sfResize | sfClose, C_NULL)
     @assert window != C_NULL
