@@ -7,9 +7,13 @@ function make_cnn(size::Tuple, channels, outputs)
   Chain(
     Conv((3, 3), channels => 8, relu),
     Conv((3, 3), 8 => 16, relu),
-    Conv((3, 3), 16 => 16, relu),
+    Conv((3, 3), 16 => 4, relu),
     MLUtils.flatten,
-    Dense(16*(s-6)^2 => 128, relu),
+    Dense(4*(s-6)^2 => 128, relu),
     Dense(128 => outputs, tanh)
   )
+end
+
+function make_cnn_temp()
+  make_cnn((15, 15), MAX_LAYERS, 5)
 end

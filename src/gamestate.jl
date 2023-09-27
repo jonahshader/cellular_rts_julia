@@ -238,7 +238,7 @@ function World(; size=15, world_gen::WorldGen=make_world_gen([size, size]))
         Vector{Pos}(),
         make_terrain(world_gen),
         0,
-        512
+        64
     )
 end
 
