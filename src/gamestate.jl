@@ -211,7 +211,8 @@ function plot_all(w::World)
         mat = Float32.(get_layer.(w.terrain) .== i)
         push!(mats, mat)
     end
-    mats
+
+    reduce((x, y) -> cat(x, y, dims=3), mats)
 end
 
 
@@ -287,7 +288,7 @@ function act!(world::World, action::Vector{Float32})
 end
 
 # action length = 5
-function act_always_selected!(world::World, action::Vector{Float32})
+function act_always_selected!(world::World, action::AbstractVector)
     dir = action_vec_to_dir(action[1:5])
     
     act_always_selected!(world, dir)
@@ -359,7 +360,7 @@ function act!(world::World, select_min, select_max, change_selection::Bool, dir:
     end
 
     # determine if the sim is done
-    done = sum(typeof.(world.terrain) .== Point) == 0 || world.age >= world.max_age
+    done = sum(typeof.(world.terrain) .== Point) == 0 || (world.age >= world.max_age)
 
     world.age += 1
     

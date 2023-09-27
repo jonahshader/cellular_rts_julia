@@ -1,6 +1,7 @@
 module cellular_rts
 
 include("gamestate.jl")
+include("algos/algos.jl")
 include("environments.jl")
 include("models/models.jl")
 

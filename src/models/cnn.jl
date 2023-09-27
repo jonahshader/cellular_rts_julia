@@ -1,6 +1,6 @@
 using Flux, MLUtils
 
-function make_cnn(size::Tuple, channels)
+function make_cnn(size::Tuple, channels, outputs)
   @assert size[1] == size[2]
   s = size[1]
 
@@ -10,6 +10,6 @@ function make_cnn(size::Tuple, channels)
     Conv((3, 3), 16 => 16, relu),
     MLUtils.flatten,
     Dense(16*(s-6)^2 => 128, relu),
-    Dense(128 => 5, tanh)
+    Dense(128 => outputs, tanh)
   )
 end
